@@ -33,7 +33,7 @@ export default function RegistrationScreen({ navigation }: Props) {
   const [repeatPassword, setRepeatPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const { setUser } = useSession();
+  const { signIn } = useSession();
   const progress = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const contentOffset = useRef(new Animated.Value(0)).current;
@@ -80,8 +80,7 @@ export default function RegistrationScreen({ navigation }: Props) {
 
     try {
       // Płeć nie jest jeszcze zapisywana w backendzie; nazwisko jest opcjonalne.
-      const user = await register({ email, firstName, password, passwordConfirm: repeatPassword });
-      setUser(user);
+      await signIn(await register({ email, firstName, password, passwordConfirm: repeatPassword }));
     } catch (reason) {
       setSubmitError(errorMessage(reason));
       setIsSubmitting(false);

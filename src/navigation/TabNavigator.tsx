@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSession } from '../session/SessionContext';
+import type { RootStackParamList } from './AppNavigator';
 import { StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -34,6 +38,15 @@ export const TAB_BAR_MIN_BOTTOM_OFFSET = 12;
 
 export default function TabNavigator() {
   const insets = useSafeAreaInsets();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user, isRestoring } = useSession();
+
+  // Wylogowanie albo token odrzucony przez serwer: wróć do ekranu startowego.
+  useEffect(() => {
+    if (!isRestoring && !user) {
+      rootNavigation.reset({ index: 0, routes: [{ name: 'Authentication' }] });
+    }
+  }, [isRestoring, user, rootNavigation]);
 
   return (
     <Tab.Navigator

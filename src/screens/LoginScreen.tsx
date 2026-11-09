@@ -5,6 +5,7 @@ import { useSession } from '../session/SessionContext';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
+  Alert,
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
@@ -23,6 +24,10 @@ import { colors } from '../theme/colors';
 
 const doNothing = () => {};
 
+/** Logowanie przez Google nie ma jeszcze obsługi w backendzie. */
+const showGoogleUnavailable = () =>
+  Alert.alert('Coming soon', 'Google sign-in is not available yet. Please continue with email.');
+
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
@@ -33,7 +38,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { setUser } = useSession();
+  const { signIn } = useSession();
   const canSubmit = email.trim().length > 0 && password.length > 0 && !isSubmitting;
 
   const handleSignIn = async () => {
@@ -42,8 +47,7 @@ export default function LoginScreen({ navigation }: Props) {
     setError(null);
     setIsSubmitting(true);
     try {
-      const user = await login(email, password);
-      setUser(user);
+      await signIn(await login(email, password));
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (reason) {
       setError(errorMessage(reason));
@@ -155,7 +159,7 @@ export default function LoginScreen({ navigation }: Props) {
 
             <Pressable
               accessibilityRole="button"
-              onPress={doNothing}
+              onPress={showGoogleUnavailable}
               style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
             >
               <GoogleLogo />

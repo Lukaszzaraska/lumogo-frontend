@@ -1,4 +1,21 @@
 export const pl = {
+  errors: {
+    network: "Can't reach the server. Check your connection and try again.",
+    generic: 'Something went wrong. Please try again.',
+    EMAIL_TAKEN: 'An account with this email already exists.',
+    INVALID_CREDENTIALS: 'Incorrect email or password.',
+    VALIDATION_ERROR: 'Please check your details and try again.',
+    USER_NOT_FOUND: 'This account no longer exists. Please sign in again.',
+  },
+  profile: {
+    title: 'Profile',
+    signOut: 'Sign out',
+  },
+  planner: {
+    finding: 'Looking for the best time…',
+    noWindow: 'No good time left for this day. Try another day.',
+    retry: 'Try again',
+  },
   home: {
     header: {
       greeting: 'Hi, {{firstName}}!',

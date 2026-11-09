@@ -5,6 +5,7 @@ import { colors } from '../theme/colors';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { loadingMessages } from '../constants/loadingMessages';
 import ProgressBar from '../components/ProgressBar';
+import { useSession } from '../session/SessionContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Loading'>;
@@ -18,6 +19,13 @@ function randomMessage() {
 
 export default function LoadingScreen({ navigation }: Props) {
   const [message] = useState(randomMessage);
+  const [animationDone, setAnimationDone] = useState(false);
+  const { user, isRestoring } = useSession();
+
+  useEffect(() => {
+    if (!animationDone || isRestoring) return;
+    navigation.replace(user ? 'Main' : 'Authentication');
+  }, [animationDone, isRestoring, user, navigation]);
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const subtitleOpacity = useRef(new Animated.Value(0)).current;
 
@@ -53,7 +61,7 @@ export default function LoadingScreen({ navigation }: Props) {
         </Animated.Text>
         <ProgressBar
           duration={DURATION}
-          onComplete={() => navigation.replace('Authentication')}
+          onComplete={() => setAnimationDone(true)}
         />
       </View>
     </View>

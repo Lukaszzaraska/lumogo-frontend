@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   ImageBackground,
   Pressable,
   StyleSheet,
@@ -12,6 +13,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import GoogleLogo from '../components/GoogleLogo';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { colors } from '../theme/colors';
+
+/** Logowanie przez Google nie ma jeszcze obsługi w backendzie. */
+const showGoogleUnavailable = () =>
+  Alert.alert('Coming soon', 'Google sign-in is not available yet. Please continue with email.');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
@@ -67,7 +72,7 @@ export default function SignUpScreen({ navigation }: Props) {
             <Pressable
               accessibilityLabel="Continue with Google"
               accessibilityRole="button"
-              onPress={() => navigation.replace('Main')}
+              onPress={showGoogleUnavailable}
               style={({ pressed }) => [styles.button, styles.googleButton, pressed && styles.pressed]}
             >
               <View style={styles.googleContent}>
