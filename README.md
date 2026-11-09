@@ -16,12 +16,18 @@ Bez `.env` aplikacja łączy się z `10.0.2.2:8080` na Androidzie i `localhost:8
 
 | Ekran | Endpoint |
 |---|---|
-| Logowanie | `POST /api/auth/login` |
-| Rejestracja (nazwisko opcjonalne, płeć jeszcze nie jest zapisywana) | `POST /api/auth/register` |
-| Home – karta warunków | `GET /api/conditions/today` (na razie Warszawa, bez lokalizacji telefonu) |
-| Home / Chat – imię użytkownika | z odpowiedzi logowania/rejestracji |
+| Logowanie / rejestracja | `POST /api/auth/login`, `POST /api/auth/register` (zwracają token JWT) |
+| Start aplikacji | zapisana sesja z `expo-secure-store`, odświeżenie `GET /api/auth/profile` w tle |
+| Home – warunki | `GET /api/conditions/today` dla przybliżonej lokalizacji telefonu |
+| Home – nagłówek | imię z sesji, miasto z `expo-location` (reverse geocoding na telefonie) |
+| Chat – wynik planera | `GET /api/conditions/best-window` (wybrany dzień i czas trwania) |
+| Profil | imię, e-mail, wylogowanie |
 
-Nadal z makiety: lokalizacja w nagłówku, rekomendacja Lumo, planer okna pogodowego (brak endpointu prognozy).
-Sesja jest tylko w pamięci: po zamknięciu aplikacji trzeba zalogować się ponownie.
+Lokalizacja: tylko przybliżona (`ACCESS_COARSE_LOCATION`), raz na uruchomienie, bez śledzenia w tle.
+Bez zgody aplikacja pokazuje pogodę dla Warszawy. Współrzędne są zaokrąglane do ~1 km przed wysłaniem.
 
-Kod API: `src/api/` (`client.ts` – wspólne wywołanie i błędy, `config.ts` – adres serwera).
+Komunikaty błędów są tłumaczone z pola `code` w odpowiedzi backendu (`src/i18n/translations/pl.ts`, sekcja `errors`).
+
+Nadal z makiety: rekomendacja Lumo na Home. Logowanie przez Google nie działa (pokazuje „Coming soon”).
+
+Kod API: `src/api/` (`client.ts` – wywołania, token, błędy; `config.ts` – adres serwera).

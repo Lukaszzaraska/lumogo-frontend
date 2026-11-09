@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getTodayConditions } from '../../../api/conditions';
+import { getApproxLocation } from '../../../location/approxLocation';
 import { homeConditionsMock } from '../../../mocks/home';
 import type { HomeConditionsData } from '../../../types/home';
 
@@ -10,7 +11,7 @@ type UseHomeConditionsResult = {
 };
 
 /**
- * Bieżące warunki z backendu (na razie dla domyślnej lokalizacji: Warszawa).
+ * Bieżące warunki z backendu dla przybliżonej lokalizacji telefonu (bez zgody: Warszawa).
  * Do czasu odpowiedzi i przy błędzie karta pokazuje dane z makiety, żeby ekran
  * nie był pusty; `error` pozwala to później zasygnalizować w UI.
  */
@@ -22,7 +23,8 @@ export function useHomeConditions(): UseHomeConditionsResult {
   useEffect(() => {
     let active = true;
 
-    getTodayConditions()
+    getApproxLocation()
+      .then((location) => getTodayConditions(location))
       .then((conditions) => {
         if (active) setData(conditions);
       })

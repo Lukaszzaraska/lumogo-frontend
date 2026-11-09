@@ -1,4 +1,4 @@
-import { homeHeaderMock } from '../../../mocks/home';
+import { useApproxLocation } from '../../../location/approxLocation';
 import { useSession } from '../../../session/SessionContext';
 import type { HomeHeaderData } from '../../../types/home';
 
@@ -8,19 +8,16 @@ type UseHomeHeaderResult = {
   error: Error | null;
 };
 
-/**
- * Imię z zalogowanej sesji. Lokalizacja nadal z makiety: backend zwraca tylko
- * współrzędne, bez nazwy miasta. Bez sesji (skrót "Continue with Google") makieta.
- */
 export function useHomeHeader(): UseHomeHeaderResult {
   const { user } = useSession();
+  const location = useApproxLocation();
 
   return {
     data: {
-      ...homeHeaderMock,
-      user: { ...homeHeaderMock.user, firstName: user?.firstName ?? homeHeaderMock.user.firstName },
+      user: { firstName: user?.firstName ?? '', avatarUrl: null, initials: null },
+      location: { city: location?.city ?? '', region: location?.region ?? '' },
     },
-    isLoading: false,
+    isLoading: location === null,
     error: null,
   };
 }

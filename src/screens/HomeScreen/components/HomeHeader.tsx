@@ -10,7 +10,7 @@ type HomeHeaderProps = {
 };
 
 export function HomeHeader({ data, onAvatarPress }: HomeHeaderProps) {
-  const locationLabel = `${data.location.city}, ${data.location.region}`;
+  const locationLabel = [data.location.city, data.location.region].filter(Boolean).join(', ');
 
   return (
     <View style={styles.wrapper}>

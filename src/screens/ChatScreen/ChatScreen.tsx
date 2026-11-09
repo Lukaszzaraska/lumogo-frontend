@@ -19,8 +19,10 @@ import {
 } from '../../navigation/TabNavigator';
 import { t, type TranslationKey } from '../../i18n';
 import { colors } from '../../theme/colors';
-import { homeHeaderMock } from '../../mocks/home';
 import { useSession } from '../../session/SessionContext';
+import { ApiError, errorMessage } from '../../api/client';
+import { getBestWindow, type BestWindow } from '../../api/planner';
+import { getApproxLocation } from '../../location/approxLocation';
 import { ChatProgressBar } from './components/ChatProgressBar';
 
 const lumoAvatar = require('../../../assets/images/profile-lumo.png');
@@ -51,8 +53,11 @@ const DAY_OPTIONS = Array.from({ length: 5 }, (_, index) => {
   const date = new Date();
   date.setDate(date.getDate() + index);
 
+  // Data lokalna (toISOString dawałby dzień w UTC, czyli po północy wczorajszy).
+  const id = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
   return {
-    id: date.toISOString().slice(0, 10),
+    id,
     label: index === 0 ? 'Today' : index === 1 ? 'Tomorrow' : `In ${index} days`,
     date: date.toLocaleDateString('en-GB', {
       weekday: 'short',
@@ -139,9 +144,35 @@ export default function ChatScreen() {
     setCurrentStep((step) => step - 1);
   };
 
+  const [planState, setPlanState] = useState<
+    { status: 'loading' } | { status: 'ready'; window: BestWindow } | { status: 'error'; message: string }
+  >({ status: 'loading' });
+
+  const findBestWindow = useCallback(async () => {
+    setPlanState({ status: 'loading' });
+    try {
+      const location = await getApproxLocation();
+      const window = await getBestWindow({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        date: selectedDayId,
+        durationMinutes: selectedDuration,
+      });
+      setPlanState({ status: 'ready', window });
+    } catch (error) {
+      setPlanState({
+        status: 'error',
+        message: error instanceof ApiError && error.status === 422 ? t('planner.noWindow') : errorMessage(error),
+      });
+    }
+  }, [selectedDayId, selectedDuration]);
+
   const handleProgressComplete = useCallback(() => {
-    if (currentStep === TOTAL_STEPS) setShowSuccess(true);
-  }, [currentStep]);
+    if (currentStep === TOTAL_STEPS) {
+      setShowSuccess(true);
+      void findBestWindow();
+    }
+  }, [currentStep, findBestWindow]);
 
   if (showSuccess) {
     return (
@@ -154,9 +185,24 @@ export default function ChatScreen() {
             </Text>
 
             <View style={styles.resultTimeCard}>
-              <Ionicons color="#FFBF22" name="sunny" size={44} />
+              {planState.status === 'ready' && planState.window.precipitationProbability >= 50 ? (
+                <Ionicons color="#5B8DEF" name="rainy" size={44} />
+              ) : (
+                <Ionicons color="#FFBF22" name="sunny" size={44} />
+              )}
               <View style={styles.resultTimeCopy}>
-                <Text style={styles.resultTime}>12:00 – 12:30</Text>
+                {planState.status === 'ready' ? (
+                  <Text style={styles.resultTime}>
+                    {planState.window.start} – {planState.window.end}
+                  </Text>
+                ) : planState.status === 'loading' ? (
+                  <Text style={styles.resultDate}>{t('planner.finding')}</Text>
+                ) : (
+                  <Pressable accessibilityRole="button" onPress={() => void findBestWindow()}>
+                    <Text style={styles.resultDate}>{planState.message}</Text>
+                    <Text style={styles.resultRetry}>{t('planner.retry')}</Text>
+                  </Pressable>
+                )}
                 <Text style={styles.resultDate}>
                   {selectedDay ? `${selectedDay.label}, ${selectedDay.date.replace(',', '')}` : ''}
                 </Text>
@@ -222,7 +268,7 @@ export default function ChatScreen() {
               <View style={styles.bubble}>
                 <View style={styles.bubbleTail} />
                 <Text style={styles.bubbleText}>
-                  {t('chat.steps.activity.question', { firstName: user?.firstName ?? homeHeaderMock.user.firstName })}
+                  {t('chat.steps.activity.question', { firstName: user?.firstName ?? '' })}
                 </Text>
               </View>
             </View>
@@ -467,6 +513,12 @@ const styles = StyleSheet.create({
   },
   resultTimeCopy: {
     marginLeft: 18,
+  },
+  resultRetry: {
+    color: '#4285F4',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
   },
   resultTime: {
     color: '#1FCB60',
