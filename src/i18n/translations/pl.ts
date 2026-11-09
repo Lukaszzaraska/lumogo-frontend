@@ -25,6 +25,15 @@ export const pl = {
       button: 'Find the best time!',
       buttonAccessibilityLabel: 'Find the best time to head out',
     },
+    savedPlan: {
+      title: 'Your next adventure',
+      status: 'Upcoming',
+      temperature: 'Pleasant',
+      wind: 'Light wind',
+      windValue: '3 km/h',
+      airQuality: 'Good',
+      airQualityValue: 'air quality',
+    },
   },
   chat: {
     header: {

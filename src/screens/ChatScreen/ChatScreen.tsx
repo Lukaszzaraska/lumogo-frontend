@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  type GestureResponderEvent,
+  ActivityIndicator,
   Image,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +22,13 @@ import { t, type TranslationKey } from '../../i18n';
 import { colors } from '../../theme/colors';
 import { homeHeaderMock } from '../../mocks/home';
 import { ChatProgressBar } from './components/ChatProgressBar';
+import { useAuth } from '../../contexts/AuthContext';
+import { usePreferences } from '../../contexts/PreferencesContext';
+import { useToast } from '../../contexts/ToastContext';
+import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
+import { calendarApi } from '../../services/calendarApi';
+import { plansApi } from '../../services/plansApi';
+import { findAvailableWindow, type AvailableWindow } from '../../utils/calendarAvailability';
 
 const lumoAvatar = require('../../../assets/images/profile-lumo.png');
 const userAvatar = require('../../../assets/images/profile-woman.png');
@@ -67,41 +75,119 @@ function formatDuration(minutes: number) {
   return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
+function formatEndTime(startHour: number, startMinute: number, durationMinutes: number) {
+  const totalMinutes = startHour * 60 + startMinute + durationMinutes;
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function formatClock(date: Date) {
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
 function DurationSlider({ value, onChange }: { value: number; onChange: (value: number) => void }) {
   const [trackWidth, setTrackWidth] = useState(0);
-  const [draftValue, setDraftValue] = useState(value);
   const minimum = 15;
   const maximum = 360;
-  const progress = (draftValue - minimum) / (maximum - minimum);
+  const valueToRatio = (nextValue: number) =>
+    Math.max(0, Math.min(1, (nextValue - minimum) / (maximum - minimum)));
+  const [dragRatio, setDragRatio] = useState(() => valueToRatio(value));
+  const dragRatioRef = useRef(dragRatio);
+  const gestureStartRatioRef = useRef(dragRatio);
+  const trackWidthRef = useRef(trackWidth);
+  const trackWindowXRef = useRef<number | null>(null);
+  const sliderRef = useRef<View>(null);
+  const onChangeRef = useRef(onChange);
 
   useEffect(() => {
-    setDraftValue(value);
+    const nextRatio = valueToRatio(value);
+    dragRatioRef.current = nextRatio;
+    setDragRatio(nextRatio);
   }, [value]);
 
-  const getValueFromGesture = (event: GestureResponderEvent) => {
-    if (trackWidth === 0) return value;
-    const ratio = Math.max(0, Math.min(1, event.nativeEvent.locationX / trackWidth));
+  useEffect(() => {
+    trackWidthRef.current = trackWidth;
+  }, [trackWidth]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  const updateRatio = (nextRatio: number) => {
+    if (!Number.isFinite(nextRatio)) return;
+
+    const clampedRatio = Math.max(0, Math.min(1, nextRatio));
+    dragRatioRef.current = clampedRatio;
+    setDragRatio(clampedRatio);
+  };
+
+  const commitRatio = (ratio: number) => {
+    if (!Number.isFinite(ratio)) return;
+
     const steppedValue = Math.round((minimum + ratio * (maximum - minimum)) / 15) * 15;
-    return Math.max(minimum, Math.min(maximum, steppedValue));
+    onChangeRef.current(Math.max(minimum, Math.min(maximum, steppedValue)));
+  };
+
+  const handleSliderLayout = (width: number) => {
+    setTrackWidth(width);
+    sliderRef.current?.measureInWindow((x) => {
+      if (Number.isFinite(x)) trackWindowXRef.current = x;
+    });
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (_, gestureState) => {
+          const width = trackWidthRef.current;
+          const trackWindowX = trackWindowXRef.current;
+          const initialRatio = width > 0 && trackWindowX !== null && Number.isFinite(gestureState.x0)
+            ? (gestureState.x0 - trackWindowX) / width
+            : dragRatioRef.current;
+
+          updateRatio(initialRatio);
+          gestureStartRatioRef.current = Math.max(0, Math.min(1, initialRatio));
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const width = trackWidthRef.current;
+          if (width <= 0 || !Number.isFinite(gestureState.dx)) return;
+
+          updateRatio(gestureStartRatioRef.current + gestureState.dx / width);
+        },
+        onPanResponderRelease: () => commitRatio(dragRatioRef.current),
+        onPanResponderTerminate: () => {
+          const currentRatio = valueToRatio(value);
+          updateRatio(currentRatio);
+        },
+        onPanResponderTerminationRequest: () => false,
+        onStartShouldSetPanResponder: () => true,
+      }),
+    [value],
+  );
+
+  const handleAccessibilityAction = (actionName: string) => {
+    if (actionName === 'increment') onChange(Math.min(maximum, value + 15));
+    if (actionName === 'decrement') onChange(Math.max(minimum, value - 15));
   };
 
   return (
     <View
+      ref={sliderRef}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       accessibilityLabel="Duration"
       accessibilityRole="adjustable"
       accessibilityValue={{ min: minimum, max: maximum, now: value, text: formatDuration(value) }}
-      onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-      onMoveShouldSetResponder={() => true}
-      onResponderMove={(event) => setDraftValue(getValueFromGesture(event))}
-      onResponderRelease={(event) => onChange(getValueFromGesture(event))}
-      onResponderTerminate={() => setDraftValue(value)}
-      onResponderTerminationRequest={() => false}
-      onStartShouldSetResponder={() => false}
+      onLayout={(event) => handleSliderLayout(event.nativeEvent.layout.width)}
+      onAccessibilityAction={(event) => handleAccessibilityAction(event.nativeEvent.actionName)}
       style={styles.durationSlider}
+      {...panResponder.panHandlers}
     >
       <View style={styles.durationTrack}>
-        <View style={[styles.durationTrackFill, { width: `${progress * 100}%` }]} />
-        <View style={[styles.durationThumb, { left: `${progress * 100}%` }]} />
+        <View style={[styles.durationTrackFill, { width: `${dragRatio * 100}%` }]} />
+        <View style={[styles.durationThumb, { left: `${dragRatio * 100}%` }]} />
       </View>
     </View>
   );
@@ -110,11 +196,32 @@ function DurationSlider({ value, onChange }: { value: number; onChange: (value: 
 export default function ChatScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const { defaultDuration, favoriteActivities, loaded: prefsLoaded } = usePreferences();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
-  const [selectedDuration, setSelectedDuration] = useState(30);
+  const [selectedDuration, setSelectedDuration] = useState(defaultDuration);
+  const [prefsApplied, setPrefsApplied] = useState(false);
+
+  useEffect(() => {
+    if (prefsLoaded && !prefsApplied) {
+      setSelectedDuration(defaultDuration);
+      setPrefsApplied(true);
+    }
+  }, [prefsLoaded, defaultDuration, prefsApplied]);
   const [selectedDayId, setSelectedDayId] = useState(DAY_OPTIONS[1].id);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [recommendedWindow, setRecommendedWindow] = useState<AvailableWindow | null>(null);
+  const [calendarCalculationError, setCalendarCalculationError] = useState<string | null>(null);
+  const [calculating, setCalculating] = useState(false);
+  const googleCalendar = useGoogleCalendar();
+
+  const sortedActivities = [...ACTIVITY_OPTIONS].sort((a, b) => {
+    const aFav = favoriteActivities.includes(a.id) ? 0 : 1;
+    const bFav = favoriteActivities.includes(b.id) ? 0 : 1;
+    return aFav - bFav;
+  });
 
   const completedSteps = currentStep - 1 + (selectedActivityId ? 1 : 0);
   const progress = completedSteps / TOTAL_STEPS;
@@ -126,7 +233,53 @@ export default function ChatScreen() {
     setSelectedActivityId(id);
   };
 
-  const handleNext = () => setCurrentStep((step) => step + 1);
+  const handleCalculate = async () => {
+    setCalendarCalculationError(null);
+
+    if (!googleCalendar.connected) {
+      const start = new Date(`${selectedDayId}T12:00:00`);
+      setRecommendedWindow({
+        end: new Date(start.getTime() + selectedDuration * 60_000),
+        start,
+      });
+      setCurrentStep((step) => step + 1);
+      return;
+    }
+
+    setCalculating(true);
+    try {
+      const timeMin = new Date(`${selectedDayId}T00:00:00`);
+      const timeMax = new Date(timeMin);
+      timeMax.setDate(timeMax.getDate() + 1);
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const busyPeriods = await calendarApi.getBusyPeriods(timeMin, timeMax, timeZone);
+      const availableWindow = findAvailableWindow(selectedDayId, selectedDuration, busyPeriods);
+
+      if (!availableWindow) {
+        setCalendarCalculationError('No free window fits this day. Choose another day or a shorter duration.');
+        return;
+      }
+
+      setRecommendedWindow(availableWindow);
+      setCurrentStep((step) => step + 1);
+    } catch (calculationError) {
+      setCalendarCalculationError(
+        calculationError instanceof Error
+          ? calculationError.message
+          : 'Could not check your calendar availability.',
+      );
+    } finally {
+      setCalculating(false);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentStep === 3) {
+      void handleCalculate();
+      return;
+    }
+    setCurrentStep((step) => step + 1);
+  };
 
   const handleBack = () => {
     if (currentStep === 1) {
@@ -141,20 +294,56 @@ export default function ChatScreen() {
     if (currentStep === TOTAL_STEPS) setShowSuccess(true);
   }, [currentStep]);
 
+  const handleSavePlan = async () => {
+    if (!selectedActivity || !selectedDay || !recommendedWindow || !user) return;
+
+    const planData = {
+      activityEmoji: selectedActivity.emoji,
+      activityLabel: t(selectedActivity.labelKey),
+      dateLabel: `${selectedDay.label}, ${selectedDay.date.replace(',', '')}`,
+      startTime: formatClock(recommendedWindow.start),
+      endTime: formatClock(recommendedWindow.end),
+    };
+
+    try {
+      await plansApi.savePlan({ userId: user.id, ...planData, plannedDate: selectedDayId });
+      showToast('Plan saved!', 'success');
+    } catch {
+      showToast('Failed to save plan.', 'error');
+    }
+
+    navigation.navigate('Home', { savedPlan: planData });
+  };
+
   if (showSuccess) {
     return (
       <SafeAreaView edges={['top']} style={styles.resultSafe}>
-        <View style={[styles.resultContent, { paddingBottom: tabBarClearance + 24 }]}>
+        <ScrollView
+          contentContainerStyle={[styles.resultContent, { paddingBottom: tabBarClearance + 24 }]}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.resultCard}>
+            <Pressable
+              accessibilityLabel="Close"
+              accessibilityRole="button"
+              onPress={() => { setShowSuccess(false); setCurrentStep(1); setSelectedActivityId(null); }}
+              style={({ pressed }) => [styles.closeButton, pressed && styles.nextButtonPressed]}
+            >
+              <Ionicons color={colors.textMuted} name="close" size={22} />
+            </Pressable>
             <Text style={styles.resultTitle}>Great timing!</Text>
             <Text style={styles.resultSubtitle}>
               Here’s the best time for{`\n`}your outdoor activity.
             </Text>
 
             <View style={styles.resultTimeCard}>
-              <Ionicons color="#FFBF22" name="sunny" size={44} />
+              <Ionicons color="#FFBF22" name="sunny" size={36} />
               <View style={styles.resultTimeCopy}>
-                <Text style={styles.resultTime}>12:00 – 12:30</Text>
+                <Text style={styles.resultTime}>
+                  {recommendedWindow
+                    ? `${formatClock(recommendedWindow.start)} – ${formatClock(recommendedWindow.end)}`
+                    : `12:00 – ${formatEndTime(12, 0, selectedDuration)}`}
+                </Text>
                 <Text style={styles.resultDate}>
                   {selectedDay ? `${selectedDay.label}, ${selectedDay.date.replace(',', '')}` : ''}
                 </Text>
@@ -174,14 +363,16 @@ export default function ChatScreen() {
             </Pressable>
 
             <Pressable
+              accessibilityLabel="Save plan and return home"
               accessibilityRole="button"
+              onPress={() => void handleSavePlan()}
               style={({ pressed }) => [styles.resultSecondaryButton, pressed && styles.nextButtonPressed]}
             >
               <Ionicons color={colors.textMuted} name="bookmark-outline" size={22} />
               <Text style={styles.resultSecondaryButtonText}>Save plan</Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -206,6 +397,10 @@ export default function ChatScreen() {
         style={styles.scrollView}
       >
         <View style={styles.progressWrapper}>
+          <View style={styles.progressHeading}>
+            <Text style={styles.progressLabel}>Plan your weather window</Text>
+            <Text style={styles.progressStep}>Step {Math.min(currentStep, 3)} of 3</Text>
+          </View>
           <ChatProgressBar
             animationDuration={currentStep === TOTAL_STEPS ? 650 : undefined}
             onAnimationComplete={handleProgressComplete}
@@ -227,8 +422,9 @@ export default function ChatScreen() {
 
             <View style={styles.optionsGroup}>
               <View style={styles.optionsCard}>
-                {ACTIVITY_OPTIONS.map((option) => {
+                {sortedActivities.map((option) => {
                   const selected = option.id === selectedActivityId;
+                  const isFavorite = favoriteActivities.includes(option.id);
 
                   return (
                     <Pressable
@@ -236,6 +432,7 @@ export default function ChatScreen() {
                       onPress={() => handleSelectActivity(option.id)}
                       style={({ pressed }) => [
                         styles.option,
+                        isFavorite && !selected && styles.optionFavorite,
                         selected && styles.optionSelected,
                         pressed && styles.optionPressed,
                       ]}
@@ -244,13 +441,13 @@ export default function ChatScreen() {
                       <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
                         {t(option.labelKey)}
                       </Text>
+                      {isFavorite && (
+                        <Ionicons color={selected ? colors.primaryDefault : colors.homeWarmAccent} name="heart" size={14} />
+                      )}
                     </Pressable>
                   );
                 })}
-
-                <View style={styles.optionsCardTail} />
               </View>
-              <Image source={userAvatar} style={styles.userAvatar} />
             </View>
           </>
         ) : currentStep === 2 ? (
@@ -366,10 +563,25 @@ export default function ChatScreen() {
                 </View>
                 <Pressable
                   accessibilityRole="button"
-                  style={({ pressed }) => [styles.calendarButton, pressed && styles.nextButtonPressed]}
+                  accessibilityState={{ disabled: googleCalendar.loading }}
+                  disabled={googleCalendar.loading || googleCalendar.connected}
+                  onPress={() => void googleCalendar.connect()}
+                  style={({ pressed }) => [
+                    styles.calendarButton,
+                    googleCalendar.connected && styles.calendarButtonConnected,
+                    pressed && styles.nextButtonPressed,
+                  ]}
                 >
-                  <Text style={styles.calendarButtonText}>Connect calendar</Text>
+                  {googleCalendar.loading ? (
+                    <ActivityIndicator color={colors.backgroundPrimary} size="small" />
+                  ) : (
+                    <Text style={styles.calendarButtonText}>
+                      {googleCalendar.connected ? '✓ Calendar connected' : 'Connect Google Calendar'}
+                    </Text>
+                  )}
                 </Pressable>
+                {googleCalendar.error ? <Text style={styles.calendarError}>{googleCalendar.error}</Text> : null}
+                {calendarCalculationError ? <Text style={styles.calendarError}>{calendarCalculationError}</Text> : null}
               </View>
             </View>
           </>
@@ -390,17 +602,22 @@ export default function ChatScreen() {
           {currentStep <= 3 ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: currentStep === 1 && !selectedActivityId }}
-              disabled={currentStep === 1 && !selectedActivityId}
+              accessibilityState={{ disabled: (currentStep === 1 && !selectedActivityId) || calculating }}
+              disabled={(currentStep === 1 && !selectedActivityId) || calculating}
               onPress={handleNext}
               style={({ pressed }) => [
                 styles.nextButton,
-                currentStep === 1 && !selectedActivityId && styles.nextButtonDisabled,
+                ((currentStep === 1 && !selectedActivityId) || calculating) && styles.nextButtonDisabled,
                 pressed && styles.nextButtonPressed,
               ]}
             >
-              <Text style={styles.nextButtonText}>
-                {currentStep === 3 ? 'Calculate' : 'Next'}
+              <Text
+                style={[
+                  styles.nextButtonText,
+                  currentStep === 1 && !selectedActivityId && styles.nextButtonTextDisabled,
+                ]}
+              >
+                {calculating ? 'Checking calendar…' : currentStep === 3 ? 'Calculate' : 'Next'}
               </Text>
             </Pressable>
           ) : null}
@@ -415,173 +632,203 @@ const styles = StyleSheet.create({
     backgroundColor: colors.homeBackground,
     flex: 1,
   },
-  resultContent: {
-    flex: 1,
+  closeButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    backgroundColor: colors.homeMetricBackground,
+    borderRadius: 16,
+    height: 32,
     justifyContent: 'center',
-    paddingHorizontal: 26,
+    width: 32,
+  },
+  resultContent: {
+    backgroundColor: colors.homeBackground,
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 24,
   },
   resultCard: {
     alignItems: 'center',
     backgroundColor: colors.backgroundPrimary,
-    borderRadius: 24,
-    elevation: 8,
-    paddingBottom: 28,
-    paddingHorizontal: 28,
-    paddingTop: 36,
+    borderRadius: 28,
+    elevation: 5,
+    paddingBottom: 22,
+    paddingHorizontal: 20,
+    paddingTop: 14,
     shadowColor: colors.textPrimary,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
   },
   resultTitle: {
-    color: '#4A4A4A',
-    fontSize: 32,
+    color: colors.textPrimary,
+    fontSize: 26,
     fontWeight: '800',
     textAlign: 'center',
   },
   resultSubtitle: {
-    color: '#666666',
-    fontSize: 20,
-    lineHeight: 25,
-    marginTop: 14,
+    color: colors.textMuted,
+    fontSize: 15,
+    lineHeight: 20,
+    marginTop: 6,
     textAlign: 'center',
   },
   resultTimeCard: {
     alignItems: 'center',
-    backgroundColor: '#E9FFF1',
-    borderColor: colors.homeBackground,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    elevation: 4,
+    backgroundColor: colors.conditionGoodBackground,
+    borderColor: colors.conditionGoodBorder,
+    borderRadius: 16,
+    borderWidth: 1,
     flexDirection: 'row',
-    marginTop: 28,
-    paddingHorizontal: 18,
-    paddingVertical: 17,
-    shadowColor: colors.textPrimary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.16,
-    shadowRadius: 5,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     width: '100%',
   },
   resultTimeCopy: {
-    marginLeft: 18,
+    marginLeft: 12,
   },
   resultTime: {
-    color: '#1FCB60',
-    fontSize: 24,
+    color: colors.primaryDefault,
+    fontSize: 18,
     fontWeight: '800',
   },
   resultDate: {
     color: colors.textMuted,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 3,
   },
   resultMascotCircle: {
     alignItems: 'center',
     backgroundColor: colors.homeBackground,
-    borderColor: '#7AEDA2',
-    borderRadius: 106,
-    borderWidth: 14,
-    height: 212,
+    borderColor: colors.conditionGoodBorder,
+    borderRadius: 70,
+    borderWidth: 8,
+    height: 140,
     justifyContent: 'center',
-    marginVertical: 14,
+    marginVertical: 16,
     overflow: 'hidden',
-    width: 212,
+    width: 140,
   },
   resultMascot: {
-    height: 172,
-    width: 172,
+    height: 114,
+    width: 114,
   },
   resultPrimaryButton: {
     alignItems: 'center',
     backgroundColor: colors.homeBackground,
-    borderRadius: 23,
+    borderRadius: 24,
     flexDirection: 'row',
-    height: 46,
+    height: 50,
     justifyContent: 'center',
     width: '100%',
   },
   resultPrimaryButtonText: {
     color: colors.backgroundPrimary,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     marginLeft: 8,
   },
   resultSecondaryButton: {
     alignItems: 'center',
     borderColor: colors.textDisabled,
-    borderRadius: 23,
-    borderWidth: 2,
+    borderRadius: 24,
+    borderWidth: 1.5,
     flexDirection: 'row',
-    height: 46,
+    height: 48,
     justifyContent: 'center',
-    marginTop: 12,
+    marginTop: 10,
     width: '100%',
   },
   resultSecondaryButtonText: {
     color: colors.textMuted,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
     marginLeft: 6,
   },
   safe: {
-    backgroundColor: colors.homeBackground,
+    backgroundColor: colors.backgroundPrimary,
     flex: 1,
   },
   scrollView: {
-    backgroundColor: colors.homeMetricBackground,
+    backgroundColor: colors.homeBackground,
   },
   header: {
-    backgroundColor: colors.homeBackground,
+    backgroundColor: colors.backgroundPrimary,
     gap: 4,
-    paddingBottom: 22,
+    paddingBottom: 18,
     paddingHorizontal: 24,
-    paddingTop: 22,
+    paddingTop: 16,
+    zIndex: 1,
   },
   headerTitle: {
-    color: colors.backgroundPrimary,
+    color: colors.textPrimary,
     fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
   },
   headerSubtitle: {
-    color: colors.backgroundPrimary,
+    color: colors.textMuted,
     fontSize: 15,
     lineHeight: 20,
     textAlign: 'center',
   },
   body: {
     flexGrow: 1,
-    paddingHorizontal: 16,
-    paddingTop: 26,
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
   progressWrapper: {
-    marginBottom: 25,
+    backgroundColor: colors.backgroundPrimary,
+    borderRadius: 20,
+    elevation: 3,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: colors.textPrimary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  progressHeading: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  progressLabel: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  progressStep: {
+    color: colors.primaryDefault,
+    fontSize: 12,
+    fontWeight: '700',
   },
   messageRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    marginBottom: 26,
-    paddingHorizontal: 4,
+    marginBottom: 16,
   },
   lumoAvatar: {
-    backgroundColor: colors.homeBackground,
-    borderColor: colors.homeWarmDark,
+    backgroundColor: colors.backgroundPrimary,
+    borderColor: colors.conditionGoodBorder,
     borderRadius: 26,
-    borderWidth: 1.5,
+    borderWidth: 3,
     height: 52,
     marginRight: 10,
     width: 52,
   },
   bubble: {
     backgroundColor: colors.backgroundPrimary,
-    borderRadius: 18,
-    elevation: 3,
+    borderRadius: 24,
+    elevation: 4,
     flexShrink: 1,
     marginLeft: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 15,
     shadowColor: colors.textPrimary,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
@@ -596,7 +843,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 8,
     bottom: 14,
     height: 0,
-    left: -10,
+    left: -8,
     position: 'absolute',
     width: 0,
   },
@@ -610,49 +857,58 @@ const styles = StyleSheet.create({
   },
   optionsCard: {
     backgroundColor: colors.backgroundPrimary,
-    borderRadius: 18,
-    elevation: 4,
-    gap: 11,
-    paddingBottom: 30,
-    paddingHorizontal: 13,
-    paddingTop: 27,
+    borderRadius: 28,
+    elevation: 5,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 10,
+    justifyContent: 'space-between',
+    padding: 16,
+    rowGap: 10,
     shadowColor: colors.textPrimary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.16,
     shadowRadius: 6,
-    marginLeft: 34,
-    width: '70.5%',
+    width: '100%',
   },
   option: {
     alignItems: 'center',
     backgroundColor: colors.backgroundPrimary,
-    borderColor: '#9A9A9A',
-    borderRadius: 21,
+    borderColor: colors.conditionCardBorder,
+    borderRadius: 20,
     borderWidth: 1,
     flexDirection: 'row',
-    height: 41,
+    flexBasis: '47%',
+    flexGrow: 1,
+    height: 50,
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
+    maxWidth: '48%',
+  },
+  optionFavorite: {
+    borderColor: colors.homeWarmLight,
+    borderWidth: 1.5,
   },
   optionSelected: {
     backgroundColor: colors.conditionGoodBackground,
-    borderColor: '#218C4E',
+    borderColor: colors.homeBackground,
   },
   optionPressed: {
     opacity: 0.7,
   },
   optionEmoji: {
-    fontSize: 13,
-    marginRight: 4,
+    fontSize: 19,
+    marginRight: 7,
   },
   optionLabel: {
-    color: '#555555',
-    fontSize: 14,
+    color: colors.textMuted,
+    flex: 1,
+    fontSize: 13,
     fontWeight: '400',
   },
   optionLabelSelected: {
-    color: '#218C4E',
-    fontWeight: '600',
+    color: colors.primaryDefault,
+    fontWeight: '700',
   },
   optionsCardTail: {
     borderBottomColor: 'transparent',
@@ -683,13 +939,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     marginBottom: 22,
-    paddingHorizontal: 4,
   },
   userBubble: {
     alignItems: 'center',
     backgroundColor: colors.backgroundPrimary,
-    borderRadius: 18,
-    elevation: 3,
+    borderRadius: 24,
+    elevation: 4,
     marginRight: 18,
     minWidth: '68%',
     paddingHorizontal: 16,
@@ -709,25 +964,25 @@ const styles = StyleSheet.create({
     bottom: 14,
     height: 0,
     position: 'absolute',
-    right: -10,
+    right: -8,
     width: 0,
   },
   stepAvatar: {
-    backgroundColor: colors.homeBackground,
-    borderColor: colors.homeWarmDark,
+    backgroundColor: colors.backgroundPrimary,
+    borderColor: colors.conditionGoodBorder,
     borderRadius: 26,
-    borderWidth: 1.5,
+    borderWidth: 3,
     height: 52,
     width: 52,
   },
   stepBubble: {
     backgroundColor: colors.backgroundPrimary,
-    borderRadius: 18,
-    elevation: 3,
+    borderRadius: 24,
+    elevation: 4,
     flex: 1,
     marginLeft: 18,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 15,
     shadowColor: colors.textPrimary,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
@@ -735,19 +990,18 @@ const styles = StyleSheet.create({
   },
   durationCard: {
     backgroundColor: colors.backgroundPrimary,
-    borderRadius: 18,
-    elevation: 4,
-    marginHorizontal: 14,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    paddingTop: 18,
+    borderRadius: 28,
+    elevation: 5,
+    paddingBottom: 26,
+    paddingHorizontal: 22,
+    paddingTop: 22,
     shadowColor: colors.textPrimary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.16,
     shadowRadius: 6,
   },
   durationTitle: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     fontSize: 22,
     fontWeight: '700',
   },
@@ -757,10 +1011,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   durationValue: {
-    color: colors.homeBackground,
+    color: colors.primaryDefault,
     fontSize: 36,
     fontWeight: '800',
-    marginVertical: 28,
+    marginVertical: 24,
     textAlign: 'center',
   },
   durationSlider: {
@@ -809,10 +1063,10 @@ const styles = StyleSheet.create({
   durationOption: {
     alignItems: 'center',
     borderColor: colors.textDisabled,
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     flex: 1,
-    height: 36,
+    height: 40,
     justifyContent: 'center',
   },
   durationOptionSelected: {
@@ -824,16 +1078,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   durationOptionTextSelected: {
-    color: colors.homeBackground,
+    color: colors.primaryDefault,
+    fontWeight: '700',
   },
   dayCard: {
     backgroundColor: colors.backgroundPrimary,
-    borderRadius: 18,
-    elevation: 4,
-    marginHorizontal: 14,
-    paddingBottom: 20,
-    paddingHorizontal: 18,
-    paddingTop: 18,
+    borderRadius: 28,
+    elevation: 5,
+    paddingBottom: 22,
+    paddingHorizontal: 20,
+    paddingTop: 22,
     shadowColor: colors.textPrimary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.16,
@@ -849,9 +1103,9 @@ const styles = StyleSheet.create({
   dayOption: {
     alignItems: 'center',
     borderColor: colors.textDisabled,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    height: 58,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 62,
     justifyContent: 'center',
     width: '30%',
   },
@@ -866,7 +1120,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   dayOptionLabelSelected: {
-    color: '#218C4E',
+    color: colors.primaryDefault,
   },
   dayOptionDate: {
     color: colors.textMuted,
@@ -875,7 +1129,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   dayOptionDateSelected: {
-    color: '#218C4E',
+    color: colors.primaryDefault,
     fontWeight: '600',
   },
   orRow: {
@@ -896,9 +1150,9 @@ const styles = StyleSheet.create({
   calendarCard: {
     backgroundColor: colors.conditionGoodBackground,
     borderColor: colors.homeBackground,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    padding: 10,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 14,
   },
   calendarIntro: {
     flexDirection: 'row',
@@ -906,12 +1160,13 @@ const styles = StyleSheet.create({
   calendarIcon: {
     alignItems: 'center',
     borderColor: colors.homeBackground,
-    borderRadius: 21,
-    borderWidth: 1.5,
-    height: 42,
+    backgroundColor: colors.backgroundPrimary,
+    borderRadius: 23,
+    borderWidth: 1,
+    height: 46,
     justifyContent: 'center',
     marginRight: 10,
-    width: 42,
+    width: 46,
   },
   calendarCopy: {
     flex: 1,
@@ -930,8 +1185,8 @@ const styles = StyleSheet.create({
   calendarButton: {
     alignItems: 'center',
     backgroundColor: colors.homeBackground,
-    borderRadius: 18,
-    height: 36,
+    borderRadius: 22,
+    height: 44,
     justifyContent: 'center',
     marginTop: 12,
   },
@@ -940,30 +1195,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  calendarButtonConnected: {
+    backgroundColor: colors.primaryDefault,
+  },
+  calendarError: {
+    color: colors.conditionPoor,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 8,
+    textAlign: 'center',
+  },
   nextButton: {
     alignItems: 'center',
     backgroundColor: colors.homeBackground,
-    borderRadius: 26,
-    height: 52,
+    borderRadius: 25,
+    flex: 2,
+    height: 50,
     justifyContent: 'center',
   },
   stepActions: {
-    left: 32,
+    backgroundColor: colors.backgroundPrimary,
+    borderColor: colors.conditionCardBorder,
+    borderRadius: 31,
+    borderWidth: StyleSheet.hairlineWidth,
+    elevation: 12,
+    flexDirection: 'row',
+    gap: 8,
+    left: 20,
+    padding: 3,
     position: 'absolute',
-    right: 32,
-    gap: 10,
+    right: 20,
+    shadowColor: colors.textPrimary,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
   },
   backButton: {
     alignItems: 'center',
     backgroundColor: colors.backgroundPrimary,
-    borderColor: '#9A9A9A',
-    borderRadius: 26,
-    borderWidth: 1.5,
-    height: 52,
+    borderColor: colors.conditionCardBorder,
+    borderRadius: 25,
+    borderWidth: 1,
+    flex: 1,
+    height: 50,
     justifyContent: 'center',
   },
   backButtonText: {
-    color: '#9A9A9A',
+    color: colors.textMuted,
     fontSize: 17,
     fontWeight: '700',
   },
@@ -971,11 +1249,14 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   nextButtonDisabled: {
-    backgroundColor: colors.textDisabled,
+    backgroundColor: colors.homeMetricBackground,
   },
   nextButtonText: {
     color: colors.backgroundPrimary,
     fontSize: 17,
     fontWeight: '700',
+  },
+  nextButtonTextDisabled: {
+    color: colors.secondaryDefault,
   },
 });

@@ -9,9 +9,10 @@ import WeatherScreen from '../screens/WeatherScreen';
 import ChatScreen from '../screens/ChatScreen';
 import AddScreen from '../screens/AddScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import type { HomeSavedPlanData } from '../types/home';
 
 export type TabParamList = {
-  Home: undefined;
+  Home: { savedPlan?: HomeSavedPlanData } | undefined;
   Weather: undefined;
   Add: undefined;
   Chat: undefined;
@@ -46,20 +47,20 @@ export default function TabNavigator() {
         tabBarInactiveTintColor: colors.textDisabled,
         tabBarStyle: {
           backgroundColor: colors.backgroundPrimary,
-          borderColor: 'transparent',
+          borderColor: '#E5E5E5',
           borderRadius: 34,
-          borderWidth: 0,
+          borderWidth: 1,
           bottom: Math.max(insets.bottom, TAB_BAR_MIN_BOTTOM_OFFSET),
-          elevation: 10,
+          elevation: 24,
           height: TAB_BAR_HEIGHT,
           marginHorizontal: 28,
           paddingBottom: 0,
           paddingTop: 0,
           position: 'absolute',
           shadowColor: colors.textPrimary,
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.22,
-          shadowRadius: 14,
+          shadowOffset: { width: 0, height: -8 },
+          shadowOpacity: 0.34,
+          shadowRadius: 18,
         },
         tabBarItemStyle: {
           borderRadius: 34,

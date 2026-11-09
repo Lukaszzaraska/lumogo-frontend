@@ -1,6 +1,7 @@
 import type { HomeConditionsData, HomeHeaderData, HomeRecommendationData } from '../types/home';
 
 export const homeHeaderMock: HomeHeaderData = {
+  currentStreakDays: 4,
   user: {
     firstName: 'Kasia',
     avatarUrl: null,

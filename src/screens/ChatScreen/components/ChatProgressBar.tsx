@@ -44,14 +44,14 @@ export function ChatProgressBar({
 
 const styles = StyleSheet.create({
   track: {
-    backgroundColor: colors.backgroundPrimary,
-    borderRadius: 3,
-    height: 6,
+    backgroundColor: colors.conditionGoodBackground,
+    borderRadius: 4,
+    height: 8,
     overflow: 'hidden',
   },
   fill: {
     backgroundColor: colors.homeBackground,
-    borderRadius: 3,
-    height: 6,
+    borderRadius: 4,
+    height: 8,
   },
 });

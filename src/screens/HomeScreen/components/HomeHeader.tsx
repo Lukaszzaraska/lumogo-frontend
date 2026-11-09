@@ -11,6 +11,9 @@ type HomeHeaderProps = {
 
 export function HomeHeader({ data, onAvatarPress }: HomeHeaderProps) {
   const locationLabel = `${data.location.city}, ${data.location.region}`;
+  const streakLabel = data.currentStreakDays === 0
+    ? 'Start your streak today'
+    : `${data.currentStreakDays} day streak`;
 
   return (
     <View style={styles.wrapper}>
@@ -18,6 +21,13 @@ export function HomeHeader({ data, onAvatarPress }: HomeHeaderProps) {
         <View style={styles.copy}>
           <Text style={styles.greeting}>{t('home.header.greeting', { firstName: data.user.firstName })}</Text>
           <Text style={styles.location}>{locationLabel}</Text>
+          <View
+            accessibilityLabel={streakLabel}
+            style={styles.streakBadge}
+          >
+            <Text accessibilityElementsHidden style={styles.streakEmoji}>🔥</Text>
+            <Text accessibilityElementsHidden style={styles.streakText}>{streakLabel}</Text>
+          </View>
         </View>
 
         <Pressable
@@ -42,11 +52,6 @@ export function HomeHeader({ data, onAvatarPress }: HomeHeaderProps) {
 const styles = StyleSheet.create({
   wrapper: {
     backgroundColor: colors.backgroundPrimary,
-    elevation: 6,
-    shadowColor: colors.textPrimary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
     zIndex: 1,
   },
   container: {
@@ -54,9 +59,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundPrimary,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingBottom: 16,
+    paddingBottom: 12,
     paddingHorizontal: 24,
-    paddingTop: 14,
+    paddingTop: 8,
   },
   copy: {
     flex: 1,
@@ -64,25 +69,49 @@ const styles = StyleSheet.create({
   },
   greeting: {
     color: colors.textPrimary,
-    fontSize: 28,
-    fontWeight: '700',
-    lineHeight: 34,
+    fontSize: 26,
+    fontWeight: '800',
+    lineHeight: 31,
   },
   location: {
-    color: colors.textSecondary,
-    fontSize: 18,
-    lineHeight: 24,
+    color: colors.textMuted,
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: 2,
+  },
+  streakBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.conditionGoodBackground,
+    borderColor: colors.conditionGoodBorder,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    marginTop: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  streakEmoji: {
+    fontSize: 15,
+    lineHeight: 18,
+  },
+  streakText: {
+    color: colors.primaryDefault,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginLeft: 5,
   },
   avatar: {
     alignItems: 'center',
-    backgroundColor: colors.homeBackground,
-    borderColor: colors.homeWarmDark,
-    borderRadius: 36,
-    borderWidth: 1.5,
-    height: 72,
+    backgroundColor: colors.backgroundPrimary,
+    borderColor: colors.conditionGoodBorder,
+    borderRadius: 28,
+    borderWidth: 3,
+    height: 56,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 72,
+    width: 56,
   },
   avatarImage: {
     height: '100%',
