@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
+import { errorMessage } from '../api/client';
+import { login } from '../api/auth';
+import { useSession } from '../session/SessionContext';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
+  ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -27,6 +31,25 @@ export default function LoginScreen({ navigation }: Props) {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { setUser } = useSession();
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !isSubmitting;
+
+  const handleSignIn = async () => {
+    if (!canSubmit) return;
+    Keyboard.dismiss();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const user = await login(email, password);
+      setUser(user);
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+    } catch (reason) {
+      setError(errorMessage(reason));
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -100,12 +123,28 @@ export default function LoginScreen({ navigation }: Props) {
               </View>
             </View>
 
+            {error ? (
+              <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+                {error}
+              </Text>
+            ) : null}
+
             <Pressable
               accessibilityRole="button"
-              onPress={doNothing}
-              style={({ pressed }) => [styles.signInButton, pressed && styles.pressed]}
+              accessibilityState={{ disabled: !canSubmit, busy: isSubmitting }}
+              disabled={!canSubmit}
+              onPress={handleSignIn}
+              style={({ pressed }) => [
+                styles.signInButton,
+                !canSubmit && styles.signInButtonDisabled,
+                pressed && styles.pressed,
+              ]}
             >
-              <Text style={styles.signInText}>Sign in</Text>
+              {isSubmitting ? (
+                <ActivityIndicator color={colors.backgroundPrimary} />
+              ) : (
+                <Text style={styles.signInText}>Sign in</Text>
+              )}
             </Pressable>
 
             <View style={styles.separator}>
@@ -235,6 +274,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 35,
     width: '100%',
+  },
+  signInButtonDisabled: {
+    opacity: 0.5,
+  },
+  errorText: {
+    color: '#D64545',
+    fontSize: 14,
+    marginTop: 20,
+    textAlign: 'center',
   },
   signInText: {
     color: colors.backgroundPrimary,

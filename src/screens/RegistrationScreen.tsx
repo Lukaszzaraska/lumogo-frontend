@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { errorMessage } from '../api/client';
+import { register } from '../api/auth';
+import { useSession } from '../session/SessionContext';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
+  ActivityIndicator,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
@@ -27,6 +31,9 @@ export default function RegistrationScreen({ navigation }: Props) {
   const [gender, setGender] = useState<string>();
   const [password, setPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { setUser } = useSession();
   const progress = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const contentOffset = useRef(new Animated.Value(0)).current;
@@ -65,8 +72,22 @@ export default function RegistrationScreen({ navigation }: Props) {
     });
   };
 
-  const completeRegistration = () => {
+  const completeRegistration = async () => {
+    if (isSubmitting) return;
     Keyboard.dismiss();
+    setSubmitError(null);
+    setIsSubmitting(true);
+
+    try {
+      // Płeć nie jest jeszcze zapisywana w backendzie; nazwisko jest opcjonalne.
+      const user = await register({ email, firstName, password, passwordConfirm: repeatPassword });
+      setUser(user);
+    } catch (reason) {
+      setSubmitError(errorMessage(reason));
+      setIsSubmitting(false);
+      return;
+    }
+
     Animated.timing(progress, {
       toValue: 1,
       duration: 650,
@@ -153,6 +174,8 @@ export default function RegistrationScreen({ navigation }: Props) {
             </View>
             <View style={[styles.step, step !== 2 && styles.stepHidden]}>
               <SecurityStep
+                error={submitError}
+                isSubmitting={isSubmitting}
                 onBack={handleBack}
                 onPasswordChange={setPassword}
                 onRegister={completeRegistration}
@@ -241,6 +264,8 @@ function PersonalInfoStep({
 }
 
 type SecurityStepProps = {
+  error: string | null;
+  isSubmitting: boolean;
   onBack: () => void;
   onPasswordChange: (value: string) => void;
   onRegister: () => void;
@@ -250,6 +275,8 @@ type SecurityStepProps = {
 };
 
 function SecurityStep({
+  error,
+  isSubmitting,
   onBack,
   onPasswordChange,
   onRegister,
@@ -300,9 +327,16 @@ function SecurityStep({
         />
       </View>
 
+      {error ? (
+        <Text accessibilityLiveRegion="polite" style={styles.submitError}>
+          {error}
+        </Text>
+      ) : null}
+
       <FormActions
-        actionDisabled={!canRegister}
+        actionDisabled={!canRegister || isSubmitting}
         actionLabel="Register"
+        isLoading={isSubmitting}
         onAction={onRegister}
         onBack={onBack}
       />
@@ -407,17 +441,19 @@ function Requirement({ active, label, met }: { active: boolean; label: string; m
 
 function ActionButton({
   disabled,
+  isLoading,
   label,
   onPress,
 }: {
   disabled?: boolean;
+  isLoading?: boolean;
   label: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, busy: isLoading }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
@@ -426,7 +462,11 @@ function ActionButton({
         pressed && styles.pressed,
       ]}
     >
-      <Text style={styles.actionButtonText}>{label}</Text>
+      {isLoading ? (
+        <ActivityIndicator color={colors.backgroundPrimary} />
+      ) : (
+        <Text style={styles.actionButtonText}>{label}</Text>
+      )}
     </Pressable>
   );
 }
@@ -434,11 +474,13 @@ function ActionButton({
 function FormActions({
   actionDisabled,
   actionLabel,
+  isLoading,
   onAction,
   onBack,
 }: {
   actionDisabled?: boolean;
   actionLabel: string;
+  isLoading?: boolean;
   onAction: () => void;
   onBack: () => void;
 }) {
@@ -451,7 +493,7 @@ function FormActions({
       >
         <Text style={styles.backActionButtonText}>Back</Text>
       </Pressable>
-      <ActionButton disabled={actionDisabled} label={actionLabel} onPress={onAction} />
+      <ActionButton disabled={actionDisabled} isLoading={isLoading} label={actionLabel} onPress={onAction} />
     </View>
   );
 }
@@ -540,6 +582,13 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderColor: colors.accent,
+  },
+  submitError: {
+    color: '#D64545',
+    fontSize: 14,
+    lineHeight: 19,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   fieldError: {
     color: '#D64545',

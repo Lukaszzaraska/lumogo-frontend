@@ -20,6 +20,7 @@ import {
 import { t, type TranslationKey } from '../../i18n';
 import { colors } from '../../theme/colors';
 import { homeHeaderMock } from '../../mocks/home';
+import { useSession } from '../../session/SessionContext';
 import { ChatProgressBar } from './components/ChatProgressBar';
 
 const lumoAvatar = require('../../../assets/images/profile-lumo.png');
@@ -110,6 +111,7 @@ function DurationSlider({ value, onChange }: { value: number; onChange: (value: 
 export default function ChatScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>();
   const insets = useSafeAreaInsets();
+  const { user } = useSession();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState(30);
@@ -220,7 +222,7 @@ export default function ChatScreen() {
               <View style={styles.bubble}>
                 <View style={styles.bubbleTail} />
                 <Text style={styles.bubbleText}>
-                  {t('chat.steps.activity.question', { firstName: homeHeaderMock.user.firstName })}
+                  {t('chat.steps.activity.question', { firstName: user?.firstName ?? homeHeaderMock.user.firstName })}
                 </Text>
               </View>
             </View>

@@ -3,13 +3,16 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AppNavigator from './src/navigation/AppNavigator';
+import { SessionProvider } from './src/session/SessionContext';
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>
+      <SessionProvider>
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </SessionProvider>
       <StatusBar style="auto" />
     </SafeAreaProvider>
   );
