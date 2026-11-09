@@ -1,11 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { errorMessage } from '../api/client';
-import { register } from '../api/auth';
-import { useSession } from '../session/SessionContext';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  ActivityIndicator,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
@@ -17,23 +13,27 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../contexts/AuthContext';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import Dropdown from '../components/Dropdown';
+import { errorMessage } from '../api/client';
+import { authApi } from '../services/authApi';
 import { colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Registration'>;
 
 export default function RegistrationScreen({ navigation }: Props) {
+  const { signIn } = useAuth();
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [gender, setGender] = useState<string>();
   const [password, setPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const { signIn } = useSession();
+  const [registrationError, setRegistrationError] = useState<string>();
+  const [isRegistering, setIsRegistering] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const contentOffset = useRef(new Animated.Value(0)).current;
@@ -73,17 +73,25 @@ export default function RegistrationScreen({ navigation }: Props) {
   };
 
   const completeRegistration = async () => {
-    if (isSubmitting) return;
+    if (isRegistering) return;
+
     Keyboard.dismiss();
-    setSubmitError(null);
-    setIsSubmitting(true);
+    setIsRegistering(true);
+    setRegistrationError(undefined);
 
     try {
-      // Płeć nie jest jeszcze zapisywana w backendzie; nazwisko jest opcjonalne.
-      await signIn(await register({ email, firstName, password, passwordConfirm: repeatPassword }));
-    } catch (reason) {
-      setSubmitError(errorMessage(reason));
-      setIsSubmitting(false);
+      const result = await authApi.register({
+        email: email.trim().toLowerCase(),
+        firstName: firstName.trim(),
+        gender: gender ?? '-',
+        password,
+      });
+      await signIn(result);
+    } catch (error) {
+      setRegistrationError(
+        errorMessage(error),
+      );
+      setIsRegistering(false);
       return;
     }
 
@@ -134,9 +142,17 @@ export default function RegistrationScreen({ navigation }: Props) {
     inputRange: [0, 1],
     outputRange: ['0%', '100%'],
   });
+  const canContinue = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+    && /^[\p{L}\p{M}][\p{L}\p{M}' -]*$/u.test(firstName.trim())
+    && firstName.trim().replace(/[^\p{L}]/gu, '').length >= 2;
+  const canRegister = password.length >= 8
+    && /[^\p{L}\p{N}\s]/u.test(password)
+    && /\p{Lu}/u.test(password)
+    && repeatPassword.length > 0
+    && password === repeatPassword;
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -164,8 +180,6 @@ export default function RegistrationScreen({ navigation }: Props) {
                 email={email}
                 firstName={firstName}
                 gender={gender}
-                onBack={handleBack}
-                onContinue={showSecurityStep}
                 onEmailChange={setEmail}
                 onFirstNameChange={setFirstName}
                 onGenderChange={setGender}
@@ -173,17 +187,23 @@ export default function RegistrationScreen({ navigation }: Props) {
             </View>
             <View style={[styles.step, step !== 2 && styles.stepHidden]}>
               <SecurityStep
-                error={submitError}
-                isSubmitting={isSubmitting}
-                onBack={handleBack}
+                error={registrationError}
                 onPasswordChange={setPassword}
-                onRegister={completeRegistration}
                 onRepeatPasswordChange={setRepeatPassword}
                 password={password}
                 repeatPassword={repeatPassword}
               />
             </View>
           </Animated.View>
+
+          <View style={[styles.actionDock, { paddingBottom: insets.bottom + 12 }]}>
+            <FormActions
+              actionDisabled={step === 1 ? !canContinue : !canRegister || isRegistering}
+              actionLabel={step === 1 ? 'Continue' : isRegistering ? 'Registering...' : 'Register'}
+              onAction={step === 1 ? showSecurityStep : completeRegistration}
+              onBack={handleBack}
+            />
+          </View>
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
     </SafeAreaView>
@@ -194,8 +214,6 @@ type PersonalInfoStepProps = {
   email: string;
   firstName: string;
   gender?: string;
-  onBack: () => void;
-  onContinue: () => void;
   onEmailChange: (value: string) => void;
   onFirstNameChange: (value: string) => void;
   onGenderChange: (value: string) => void;
@@ -205,8 +223,6 @@ function PersonalInfoStep({
   email,
   firstName,
   gender,
-  onBack,
-  onContinue,
   onEmailChange,
   onFirstNameChange,
   onGenderChange,
@@ -216,7 +232,6 @@ function PersonalInfoStep({
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const isFirstNameValid = /^[\p{L}\p{M}][\p{L}\p{M}' -]*$/u.test(firstName.trim())
     && firstName.trim().replace(/[^\p{L}]/gu, '').length >= 2;
-  const canContinue = isEmailValid && isFirstNameValid;
 
   return (
     <>
@@ -251,23 +266,13 @@ function PersonalInfoStep({
           />
         </View>
       </View>
-
-      <FormActions
-        actionDisabled={!canContinue}
-        actionLabel="Continue"
-        onAction={onContinue}
-        onBack={onBack}
-      />
     </>
   );
 }
 
 type SecurityStepProps = {
-  error: string | null;
-  isSubmitting: boolean;
-  onBack: () => void;
+  error?: string;
   onPasswordChange: (value: string) => void;
-  onRegister: () => void;
   onRepeatPasswordChange: (value: string) => void;
   password: string;
   repeatPassword: string;
@@ -275,10 +280,7 @@ type SecurityStepProps = {
 
 function SecurityStep({
   error,
-  isSubmitting,
-  onBack,
   onPasswordChange,
-  onRegister,
   onRepeatPasswordChange,
   password,
   repeatPassword,
@@ -288,8 +290,6 @@ function SecurityStep({
   const hasMinimumLength = password.length >= 8;
   const hasSpecialCharacter = /[^\p{L}\p{N}\s]/u.test(password);
   const hasBigLetter = /\p{Lu}/u.test(password);
-  const isPasswordValid = hasMinimumLength && hasSpecialCharacter && hasBigLetter;
-  const canRegister = isPasswordValid && repeatPassword.length > 0 && password === repeatPassword;
 
   return (
     <>
@@ -324,21 +324,9 @@ function SecurityStep({
           secureTextEntry
           value={repeatPassword}
         />
+
+        {error && <Text accessibilityRole="alert" style={styles.formError}>{error}</Text>}
       </View>
-
-      {error ? (
-        <Text accessibilityLiveRegion="polite" style={styles.submitError}>
-          {error}
-        </Text>
-      ) : null}
-
-      <FormActions
-        actionDisabled={!canRegister || isSubmitting}
-        actionLabel="Register"
-        isLoading={isSubmitting}
-        onAction={onRegister}
-        onBack={onBack}
-      />
     </>
   );
 }
@@ -440,19 +428,17 @@ function Requirement({ active, label, met }: { active: boolean; label: string; m
 
 function ActionButton({
   disabled,
-  isLoading,
   label,
   onPress,
 }: {
   disabled?: boolean;
-  isLoading?: boolean;
   label: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled, busy: isLoading }}
+      accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
@@ -461,11 +447,7 @@ function ActionButton({
         pressed && styles.pressed,
       ]}
     >
-      {isLoading ? (
-        <ActivityIndicator color={colors.backgroundPrimary} />
-      ) : (
-        <Text style={styles.actionButtonText}>{label}</Text>
-      )}
+      <Text style={styles.actionButtonText}>{label}</Text>
     </Pressable>
   );
 }
@@ -473,13 +455,11 @@ function ActionButton({
 function FormActions({
   actionDisabled,
   actionLabel,
-  isLoading,
   onAction,
   onBack,
 }: {
   actionDisabled?: boolean;
   actionLabel: string;
-  isLoading?: boolean;
   onAction: () => void;
   onBack: () => void;
 }) {
@@ -492,23 +472,24 @@ function FormActions({
       >
         <Text style={styles.backActionButtonText}>Back</Text>
       </Pressable>
-      <ActionButton disabled={actionDisabled} isLoading={isLoading} label={actionLabel} onPress={onAction} />
+      <ActionButton disabled={actionDisabled} label={actionLabel} onPress={onAction} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
-    backgroundColor: colors.backgroundPrimary,
+    backgroundColor: colors.accent,
     flex: 1,
   },
   screen: {
+    backgroundColor: colors.backgroundPrimary,
     flex: 1,
   },
   header: {
     alignItems: 'center',
     backgroundColor: colors.accent,
-    height: 112,
+    height: 96,
     justifyContent: 'center',
   },
   headerTitle: {
@@ -520,7 +501,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E7E7E7',
     height: 4,
     marginHorizontal: 12,
-    marginTop: 22,
+    marginTop: 16,
     overflow: 'hidden',
   },
   progressFill: {
@@ -529,26 +510,23 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    justifyContent: 'space-between',
-    paddingBottom: 28,
     paddingHorizontal: 28,
-    paddingTop: 42,
+    paddingTop: 28,
   },
   step: {
     flex: 1,
-    justifyContent: 'space-between',
   },
   stepHidden: {
     display: 'none',
   },
   fields: {
-    gap: 27,
+    gap: 20,
   },
   fieldGroup: {
     gap: 8,
   },
   label: {
-    color: '#424242',
+    color: '#1F1F1F',
     fontSize: 16,
     fontWeight: '500',
   },
@@ -582,19 +560,18 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: colors.accent,
   },
-  submitError: {
-    color: '#D64545',
-    fontSize: 14,
-    lineHeight: 19,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
   fieldError: {
     color: '#D64545',
     fontSize: 13,
     lineHeight: 17,
     marginLeft: 4,
     marginTop: -2,
+  },
+  formError: {
+    color: '#D64545',
+    fontSize: 14,
+    lineHeight: 19,
+    textAlign: 'center',
   },
   requirements: {
     gap: 8,
@@ -651,6 +628,11 @@ const styles = StyleSheet.create({
   formActions: {
     gap: 12,
   },
+  actionDock: {
+    backgroundColor: colors.backgroundPrimary,
+    paddingHorizontal: 28,
+    paddingTop: 12,
+  },
   backActionButton: {
     alignItems: 'center',
     backgroundColor: colors.backgroundPrimary,
@@ -661,7 +643,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   backActionButtonText: {
-    color: '#5F5F5F',
+    color: '#2A2A2A',
     fontSize: 17,
     fontWeight: '700',
   },

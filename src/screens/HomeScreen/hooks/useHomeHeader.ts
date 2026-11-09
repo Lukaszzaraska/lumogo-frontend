@@ -1,5 +1,7 @@
-import { useApproxLocation } from '../../../location/approxLocation';
-import { useSession } from '../../../session/SessionContext';
+import { useEffect, useState } from 'react';
+import * as Location from 'expo-location';
+import { useAuth } from '../../../contexts/AuthContext';
+import { homeHeaderMock } from '../../../mocks/home';
 import type { HomeHeaderData } from '../../../types/home';
 
 type UseHomeHeaderResult = {
@@ -9,15 +11,39 @@ type UseHomeHeaderResult = {
 };
 
 export function useHomeHeader(): UseHomeHeaderResult {
-  const { user } = useSession();
-  const location = useApproxLocation();
+  const { user } = useAuth();
+  const [location, setLocation] = useState(homeHeaderMock.location);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+      const [geocode] = await Location.reverseGeocodeAsync(position.coords);
+      if (cancelled || !geocode) return;
+
+      setLocation({
+        city: geocode.city ?? geocode.subregion ?? location.city,
+        region: geocode.region ?? location.region,
+      });
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
 
   return {
     data: {
-      user: { firstName: user?.firstName ?? '', avatarUrl: null, initials: null },
-      location: { city: location?.city ?? '', region: location?.region ?? '' },
+      ...homeHeaderMock,
+      user: {
+        ...homeHeaderMock.user,
+        firstName: user?.firstName ?? homeHeaderMock.user.firstName,
+      },
+      location,
     },
-    isLoading: location === null,
+    isLoading: false,
     error: null,
   };
 }

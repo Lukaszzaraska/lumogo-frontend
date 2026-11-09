@@ -1,6 +1,15 @@
 import React, { useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Keyboard, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Keyboard,
+  Modal,
+  Platform,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 type Props = {
   onChange: (value: string) => void;
@@ -13,6 +22,7 @@ export default function Dropdown({ onChange, options, placeholder, value }: Prop
   const [isOpen, setIsOpen] = useState(false);
   const [menuLayout, setMenuLayout] = useState({ height: 0, width: 0, x: 0, y: 0 });
   const triggerRef = useRef<View>(null);
+  const modalTopOffset = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 
   const toggleDropdown = () => {
     if (isOpen) {
@@ -67,7 +77,7 @@ export default function Dropdown({ onChange, options, placeholder, value }: Prop
               styles.menu,
               {
                 left: menuLayout.x,
-                top: menuLayout.y + menuLayout.height + 7,
+                top: menuLayout.y + menuLayout.height + modalTopOffset + 7,
                 width: menuLayout.width,
               },
             ]}

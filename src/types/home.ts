@@ -1,4 +1,5 @@
 export type HomeHeaderData = {
+  currentStreakDays: number;
   user: {
     firstName: string;
     avatarUrl: string | null;
@@ -29,4 +30,12 @@ export type HomeConditionsData = {
   windSpeedKmh: number;
   humidityPercent: number;
   airQualityIndex: number;
+};
+
+export type HomeSavedPlanData = {
+  activityEmoji: string;
+  activityLabel: string;
+  dateLabel: string;
+  endTime: string;
+  startTime: string;
 };

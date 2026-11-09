@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
 
 export type ApproxLocation = {
@@ -20,7 +19,8 @@ let cached: Promise<ApproxLocation> | null = null;
 
 async function resolveLocation(): Promise<ApproxLocation> {
   try {
-    const permission = await Location.requestForegroundPermissionsAsync();
+    // O zgodę pyta ekran logowania / LocationBanner; tutaj tylko sprawdzamy.
+    const permission = await Location.getForegroundPermissionsAsync();
     if (permission.status !== 'granted') return DEFAULT_LOCATION;
 
     // Najpierw ostatnia znana pozycja (natychmiast, bez GPS), potem jednorazowo niska dokładność.
@@ -51,26 +51,14 @@ async function resolveLocation(): Promise<ApproxLocation> {
 }
 
 /**
- * Przybliżona lokalizacja, ustalana raz na uruchomienie aplikacji (jedno zapytanie o zgodę,
- * bez śledzenia w tle). Współrzędne zaokrąglone do ~1 km przed wysłaniem do backendu.
+ * Przybliżona lokalizacja, ustalana raz na uruchomienie aplikacji (bez śledzenia w tle). Współrzędne zaokrąglone do ~1 km przed wysłaniem do backendu.
  */
-export function getApproxLocation() {
-  cached ??= resolveLocation();
-  return cached;
-}
-
-export function useApproxLocation() {
-  const [location, setLocation] = useState<ApproxLocation | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    getApproxLocation().then((result) => {
-      if (active) setLocation(result);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  return location;
+export async function getApproxLocation() {
+  if (cached) return cached;
+  const pending = resolveLocation();
+  cached = pending;
+  const result = await pending;
+  // Domyślnej lokalizacji nie zapamiętujemy: po udzieleniu zgody kolejne wywołanie ustali prawdziwą.
+  if (result === DEFAULT_LOCATION) cached = null;
+  return result;
 }

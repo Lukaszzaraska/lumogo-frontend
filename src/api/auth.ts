@@ -3,6 +3,8 @@ import { apiRequest } from './client';
 /** Odpowiedź z /api/auth/* (AuthResponse w backendzie). */
 type AuthResponseDto = {
   status: 'success' | 'error';
+  id: number;
+  gender: string | null;
   message: string;
   email: string;
   firstName: string;
@@ -12,7 +14,9 @@ type AuthResponseDto = {
 };
 
 export type SessionUser = {
+  id: number;
   email: string;
+  gender: string | null;
   firstName: string;
   lastName: string | null;
   interests: string[];
@@ -25,7 +29,9 @@ export type AuthResult = {
 
 function toSessionUser(dto: AuthResponseDto): SessionUser {
   return {
+    id: dto.id,
     email: dto.email,
+    gender: dto.gender ?? null,
     firstName: dto.firstName,
     lastName: dto.lastName || null,
     interests: dto.interests ? dto.interests.split(',').filter(Boolean) : [],
@@ -44,7 +50,8 @@ export type RegisterInput = {
   lastName?: string;
   email: string;
   password: string;
-  passwordConfirm: string;
+  /** "-" albo brak = nie podano. */
+  gender?: string;
 };
 
 export async function register(input: RegisterInput): Promise<AuthResult> {
@@ -68,4 +75,23 @@ export async function login(email: string, password: string): Promise<AuthResult
 /** Profil zalogowanego użytkownika (z tokena). */
 export async function fetchProfile(): Promise<SessionUser> {
   return toSessionUser(await apiRequest<AuthResponseDto>('/api/auth/profile'));
+}
+
+export type ProfileUpdate = {
+  firstName?: string;
+  lastName?: string;
+  gender?: string;
+};
+
+export async function updateProfile(update: ProfileUpdate): Promise<SessionUser> {
+  return toSessionUser(await apiRequest<AuthResponseDto>('/api/auth/profile', { method: 'PUT', body: update }));
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await apiRequest<null>('/api/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });
+}
+
+/** Trwale usuwa konto, plany i preferencje. */
+export async function deleteAccount(): Promise<void> {
+  await apiRequest<null>('/api/auth/account', { method: 'DELETE' });
 }

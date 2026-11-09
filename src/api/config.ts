@@ -13,3 +13,9 @@ const fallbackUrl = Platform.OS === 'android' ? 'http://10.0.2.2:8080' : 'http:/
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? fallbackUrl).replace(/\/+$/, '');
 
 export const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Kalendarz Google: frontend gotowy, backendu (/api/calendar/*) jeszcze nie ma.
+ * Włącz przez EXPO_PUBLIC_CALENDAR_ENABLED=true, gdy backend będzie gotowy.
+ */
+export const CALENDAR_ENABLED = process.env.EXPO_PUBLIC_CALENDAR_ENABLED === 'true';

@@ -2,16 +2,24 @@ import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocationPermission } from '../hooks/useLocationPermission';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RegistrationSuccess'>;
 
 export default function RegistrationSuccessScreen({ navigation }: Props) {
+  const { request } = useLocationPermission();
+
+  const handleLetsGo = async () => {
+    await request();
+    navigation.replace('Main');
+  };
+
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <View style={styles.content}>
-        <Text style={styles.title}>You’re all set!</Text>
+        <Text style={styles.title}>You're all set!</Text>
         <Text style={styles.subtitle}>Welcome to LumoGo!</Text>
 
         <View style={styles.imageCircle}>
@@ -26,10 +34,10 @@ export default function RegistrationSuccessScreen({ navigation }: Props) {
 
       <Pressable
         accessibilityRole="button"
-        onPress={() => navigation.replace('Main')}
+        onPress={handleLetsGo}
         style={({ pressed }) => [styles.button, pressed && styles.pressed]}
       >
-        <Text style={styles.buttonText}>Let’s go!</Text>
+        <Text style={styles.buttonText}>Let's go!</Text>
       </Pressable>
     </SafeAreaView>
   );
@@ -46,7 +54,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingBottom: 92,
   },
   title: {
     color: '#4A4A4A',

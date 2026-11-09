@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingHorizontal: 28,
-    paddingTop: 26,
+    paddingTop: 18,
   },
   backButton: {
     alignItems: 'center',
@@ -129,31 +129,31 @@ const styles = StyleSheet.create({
     fontSize: 44,
     fontWeight: '800',
     letterSpacing: -1,
-    marginTop: 14,
+    marginTop: 8,
   },
   cardContainer: {
     flex: 1,
     justifyContent: 'center',
-    paddingBottom: 18,
+    paddingBottom: 8,
   },
   card: {
     backgroundColor: colors.backgroundPrimary,
     borderRadius: 30,
-    paddingBottom: 55,
+    paddingBottom: 34,
     paddingHorizontal: 26,
-    paddingTop: 47,
+    paddingTop: 34,
   },
   title: {
-    color: '#4A4A4A',
+    color: '#0D0D0D',
     fontSize: 30,
     fontWeight: '700',
     textAlign: 'center',
   },
   description: {
-    color: '#7A7A7A',
+    color: '#2A2A2A',
     fontSize: 18,
     lineHeight: 25,
-    marginTop: 16,
+    marginTop: 12,
     textAlign: 'center',
   },
   button: {
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   },
   emailButton: {
     backgroundColor: colors.accent,
-    marginTop: 50,
+    marginTop: 32,
   },
   emailButtonText: {
     color: colors.backgroundPrimary,
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 17,
-    marginVertical: 26,
+    marginVertical: 20,
   },
   separatorLine: {
     backgroundColor: '#A7A7A7',
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
   },
   separatorText: {
-    color: '#858585',
+    color: '#2A2A2A',
     fontSize: 16,
   },
   googleButton: {
@@ -206,14 +206,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 43,
+    marginTop: 28,
   },
   loginPrompt: {
-    color: '#858585',
+    color: '#2A2A2A',
     fontSize: 16,
   },
   loginLink: {
-    color: '#4285F4',
+    color: '#1A5294',
     fontSize: 16,
     fontWeight: '600',
   },

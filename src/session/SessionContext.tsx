@@ -9,6 +9,8 @@ type SessionContextValue = {
   isRestoring: boolean;
   signIn: (result: AuthResult) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Podmiana danych użytkownika po edycji profilu (token bez zmian). */
+  updateUser: (user: SessionUser) => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -27,6 +29,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setAuthToken(token);
     setUser(signedInUser);
     await saveSession({ token, user: signedInUser });
+  }, []);
+
+  const updateUser = useCallback(async (updated: SessionUser) => {
+    setUser(updated);
+    const stored = await loadSession();
+    if (stored) await saveSession({ token: stored.token, user: updated });
   }, []);
 
   useEffect(() => {
@@ -72,7 +80,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [signOut]);
 
-  const value = useMemo(() => ({ user, isRestoring, signIn, signOut }), [user, isRestoring, signIn, signOut]);
+  const value = useMemo(
+    () => ({ user, isRestoring, signIn, signOut, updateUser }),
+    [user, isRestoring, signIn, signOut, updateUser],
+  );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

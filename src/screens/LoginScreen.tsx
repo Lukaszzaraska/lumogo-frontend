@@ -1,12 +1,8 @@
 import React, { useState } from 'react';
-import { errorMessage } from '../api/client';
-import { login } from '../api/auth';
-import { useSession } from '../session/SessionContext';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   Alert,
-  ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -17,9 +13,14 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import GoogleLogo from '../components/GoogleLogo';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { useLocationPermission } from '../hooks/useLocationPermission';
 import type { RootStackParamList } from '../navigation/AppNavigator';
+import { errorMessage } from '../api/client';
+import { authApi } from '../services/authApi';
 import { colors } from '../theme/colors';
 
 const doNothing = () => {};
@@ -31,27 +32,36 @@ const showGoogleUnavailable = () =>
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const { signIn } = useAuth();
+  const { showToast } = useToast();
+  const { status: locationStatus, request: requestLocation } = useLocationPermission();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailFocused, setEmailFocused] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { signIn } = useSession();
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !isSubmitting;
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignIn = async () => {
-    if (!canSubmit) return;
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const isPasswordValid = password.length >= 8;
+
+  const handleLogin = async () => {
+    if (isLoading) return;
     Keyboard.dismiss();
-    setError(null);
-    setIsSubmitting(true);
+    setIsLoading(true);
     try {
-      await signIn(await login(email, password));
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    } catch (reason) {
-      setError(errorMessage(reason));
-      setIsSubmitting(false);
+      await signIn(await authApi.login(email.trim(), password));
+      if (locationStatus !== 'granted') {
+        await requestLocation();
+      }
+      navigation.replace('Main');
+    } catch (error) {
+      showToast(errorMessage(error), 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -75,7 +85,7 @@ export default function LoginScreen({ navigation }: Props) {
             <Text style={styles.logo}>LumoGo</Text>
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, { paddingBottom: insets.bottom + 12 }]}>
             <Text style={styles.title}>Welcome back!</Text>
             <Text style={styles.subtitle}>Sign in to continue</Text>
 
@@ -86,12 +96,17 @@ export default function LoginScreen({ navigation }: Props) {
                   autoCapitalize="none"
                   autoComplete="email"
                   keyboardType="email-address"
-                  onBlur={() => setEmailFocused(false)}
+                  onBlur={() => { setEmailFocused(false); setEmailTouched(true); }}
                   onChangeText={setEmail}
                   onFocus={() => setEmailFocused(true)}
-                  style={[styles.input, emailFocused && styles.inputFocused]}
+                  placeholder="you@example.com"
+                  placeholderTextColor="#9A9A9A"
+                  style={[styles.input, emailFocused && styles.inputFocused, emailTouched && !isEmailValid && email.length > 0 && styles.inputError]}
                   value={email}
                 />
+                {emailTouched && !isEmailValid && email.length > 0 && (
+                  <Text style={styles.fieldError}>Enter a valid email address.</Text>
+                )}
               </View>
 
               <View style={styles.fieldGroup}>
@@ -100,11 +115,13 @@ export default function LoginScreen({ navigation }: Props) {
                   <TextInput
                     autoCapitalize="none"
                     autoComplete="current-password"
-                    onBlur={() => setPasswordFocused(false)}
+                    onBlur={() => { setPasswordFocused(false); setPasswordTouched(true); }}
                     onChangeText={setPassword}
                     onFocus={() => setPasswordFocused(true)}
+                    placeholder="Password"
+                    placeholderTextColor="#9A9A9A"
                     secureTextEntry={!passwordVisible}
-                    style={[styles.input, styles.passwordInput, passwordFocused && styles.inputFocused]}
+                    style={[styles.input, styles.passwordInput, passwordFocused && styles.inputFocused, passwordTouched && !isPasswordValid && password.length > 0 && styles.inputError]}
                     value={password}
                   />
                   <Pressable
@@ -121,34 +138,26 @@ export default function LoginScreen({ navigation }: Props) {
                     />
                   </Pressable>
                 </View>
+                {passwordTouched && !isPasswordValid && password.length > 0 && (
+                  <Text style={styles.fieldError}>Password must be at least 8 characters.</Text>
+                )}
                 <Pressable accessibilityRole="button" onPress={doNothing} style={styles.forgotButton}>
                   <Text style={styles.forgotText}>Forgot password?</Text>
                 </Pressable>
               </View>
             </View>
 
-            {error ? (
-              <Text accessibilityLiveRegion="polite" style={styles.errorText}>
-                {error}
-              </Text>
-            ) : null}
-
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: !canSubmit, busy: isSubmitting }}
-              disabled={!canSubmit}
-              onPress={handleSignIn}
+              disabled={isLoading || !isEmailValid || !isPasswordValid}
+              onPress={handleLogin}
               style={({ pressed }) => [
                 styles.signInButton,
-                !canSubmit && styles.signInButtonDisabled,
+                (isLoading || !isEmailValid || !isPasswordValid) && styles.signInButtonDisabled,
                 pressed && styles.pressed,
               ]}
             >
-              {isSubmitting ? (
-                <ActivityIndicator color={colors.backgroundPrimary} />
-              ) : (
-                <Text style={styles.signInText}>Sign in</Text>
-              )}
+              <Text style={styles.signInText}>{isLoading ? 'Signing in...' : 'Sign in'}</Text>
             </Pressable>
 
             <View style={styles.separator}>
@@ -182,7 +191,7 @@ const styles = StyleSheet.create({
   },
   brandArea: {
     alignItems: 'center',
-    height: 180,
+    height: 160,
     justifyContent: 'center',
     position: 'relative',
   },
@@ -206,31 +215,30 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 31,
     borderTopRightRadius: 31,
     flex: 1,
-    paddingBottom: 34,
     paddingHorizontal: 28,
-    paddingTop: 47,
+    paddingTop: 30,
   },
   title: {
-    color: '#4A4A4A',
+    color: '#0D0D0D',
     fontSize: 28,
     fontWeight: '800',
     textAlign: 'center',
   },
   subtitle: {
-    color: '#858585',
+    color: '#2A2A2A',
     fontSize: 15,
     marginTop: 8,
     textAlign: 'center',
   },
   form: {
-    gap: 20,
-    marginTop: 36,
+    gap: 16,
+    marginTop: 24,
   },
   fieldGroup: {
     gap: 7,
   },
   label: {
-    color: '#424242',
+    color: '#1F1F1F',
     fontSize: 15,
     fontWeight: '500',
   },
@@ -249,6 +257,16 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: colors.accent,
   },
+  inputError: {
+    borderColor: '#D64545',
+  },
+  fieldError: {
+    color: '#D64545',
+    fontSize: 13,
+    lineHeight: 17,
+    marginLeft: 4,
+    marginTop: -2,
+  },
   passwordInput: {
     paddingRight: 49,
   },
@@ -266,27 +284,21 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
   forgotText: {
-    color: '#4285F4',
+    color: '#1A5294',
     fontSize: 13,
   },
   signInButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#4A4A4A',
+    backgroundColor: '#1F1F1F',
     borderRadius: 28,
     height: 57,
     justifyContent: 'center',
-    marginTop: 35,
+    marginTop: 24,
     width: '100%',
   },
   signInButtonDisabled: {
-    opacity: 0.5,
-  },
-  errorText: {
-    color: '#D64545',
-    fontSize: 14,
-    marginTop: 20,
-    textAlign: 'center',
+    backgroundColor: '#CFCFCF',
   },
   signInText: {
     color: colors.backgroundPrimary,
@@ -297,7 +309,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
-    marginVertical: 20,
+    marginVertical: 16,
   },
   separatorLine: {
     backgroundColor: '#A7A7A7',
@@ -305,7 +317,7 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
   },
   separatorText: {
-    color: '#858585',
+    color: '#2A2A2A',
     fontSize: 13,
   },
   googleButton: {

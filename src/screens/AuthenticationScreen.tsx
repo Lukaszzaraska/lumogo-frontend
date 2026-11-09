@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     justifyContent: 'flex-end',
-    paddingBottom: 110,
+    paddingBottom: 24,
     paddingHorizontal: 34,
   },
   card: {

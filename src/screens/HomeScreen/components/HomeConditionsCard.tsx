@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { t, type TranslationKey } from '../../../i18n';
 import { colors } from '../../../theme/colors';
 import type { HomeConditionsData, HomeConditionsStatus } from '../../../types/home';
@@ -41,6 +42,16 @@ const statusTones: Record<
   },
 };
 
+const metricIcons: Record<
+  ReturnType<typeof getHomeConditionMetrics>[number]['id'],
+  { color: string; name: React.ComponentProps<typeof Ionicons>['name'] }
+> = {
+  temperature: { color: colors.homeWarmAccent, name: 'thermometer-outline' },
+  wind: { color: colors.conditionMetricAccent, name: 'leaf-outline' },
+  humidity: { color: '#4FAAE8', name: 'water-outline' },
+  airQuality: { color: colors.conditionGood, name: 'sparkles-outline' },
+};
+
 export function HomeConditionsCard({ data }: HomeConditionsCardProps) {
   const score = getHomeConditionsScore(data);
   const maxScore = getHomeConditionsMaxScore(data);
@@ -55,17 +66,10 @@ export function HomeConditionsCard({ data }: HomeConditionsCardProps) {
           <Text adjustsFontSizeToFit minimumFontScale={0.75} numberOfLines={1} style={styles.title}>
             {t('home.conditions.title')}
           </Text>
-          <Text
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
-            numberOfLines={1}
-            style={[styles.score, { color: statusTone.color }]}
-          >
-            {score}
-          </Text>
-          <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.scoreSuffix}>
-            {t('home.conditions.pointsSuffix', { maxScore })}
-          </Text>
+          <View style={styles.scoreRow}>
+            <Text style={[styles.score, { color: statusTone.color }]}>{score}</Text>
+            <Text style={styles.scoreSuffix}>/{maxScore}</Text>
+          </View>
         </View>
 
         <View
@@ -89,16 +93,16 @@ export function HomeConditionsCard({ data }: HomeConditionsCardProps) {
       </View>
 
       <View style={styles.metricsGrid}>
-        {metrics.map((metric) => (
-          <View key={metric.id} style={styles.metricTile}>
-            <Text
-              adjustsFontSizeToFit
-              minimumFontScale={0.62}
-              numberOfLines={1}
-              style={styles.metricLabel}
-            >
-              {t(metric.labelKey)}
-            </Text>
+        {metrics.map((metric, index) => (
+          <View
+            key={metric.id}
+            style={[styles.metricTile, index > 0 && styles.metricTileWithDivider]}
+          >
+            <Ionicons
+              color={metricIcons[metric.id].color}
+              name={metricIcons[metric.id].name}
+              size={22}
+            />
             <Text
               adjustsFontSizeToFit
               minimumFontScale={0.72}
@@ -106,6 +110,14 @@ export function HomeConditionsCard({ data }: HomeConditionsCardProps) {
               style={[styles.metricValue, metric.accented ? styles.metricValueAccent : undefined]}
             >
               {metric.value}
+            </Text>
+            <Text
+              adjustsFontSizeToFit
+              minimumFontScale={0.58}
+              numberOfLines={1}
+              style={styles.metricLabel}
+            >
+              {t(metric.labelKey)}
             </Text>
           </View>
         ))}
@@ -117,20 +129,20 @@ export function HomeConditionsCard({ data }: HomeConditionsCardProps) {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.backgroundPrimary,
-    borderRadius: 20,
+    borderRadius: 28,
     elevation: 5,
     marginHorizontal: 20,
-    marginTop: 26,
-    paddingBottom: 20,
-    paddingHorizontal: 18,
-    paddingTop: 18,
+    marginTop: 16,
+    paddingBottom: 14,
+    paddingHorizontal: 20,
+    paddingTop: 14,
     shadowColor: colors.textPrimary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18,
     shadowRadius: 5,
   },
   summary: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
@@ -139,25 +151,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-start',
     minWidth: 0,
-    paddingLeft: 8,
-    paddingRight: 9,
+    paddingRight: 12,
   },
   title: {
-    color: colors.textMuted,
-    fontSize: 15,
-    lineHeight: 19,
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 23,
+  },
+  scoreRow: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    marginTop: 4,
   },
   score: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '800',
-    lineHeight: 36,
-    marginTop: 4,
+    lineHeight: 40,
   },
   scoreSuffix: {
     color: colors.textMuted,
-    fontSize: 15,
-    lineHeight: 19,
-    marginTop: 6,
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginLeft: 3,
   },
   statusBadge: {
     alignItems: 'center',
@@ -175,31 +192,30 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   metricsGrid: {
+    borderTopColor: colors.homeMetricBackground,
+    borderTopWidth: 1,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    rowGap: 10,
+    marginTop: 12,
+    paddingTop: 12,
     width: '100%',
   },
   metricTile: {
     alignItems: 'center',
-    backgroundColor: colors.homeMetricBackground,
-    borderRadius: 12,
-    flexGrow: 0,
-    flexShrink: 1,
+    flex: 1,
     justifyContent: 'center',
-    minHeight: 56,
     minWidth: 0,
-    paddingHorizontal: 2,
-    width: '48%',
+    paddingHorizontal: 4,
+  },
+  metricTileWithDivider: {
+    borderLeftColor: colors.homeMetricBackground,
+    borderLeftWidth: 1,
   },
   metricValue: {
     color: colors.textMuted,
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '800',
     lineHeight: 20,
-    marginTop: 2,
+    marginTop: 5,
     maxWidth: '100%',
   },
   metricValueAccent: {
@@ -207,8 +223,9 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 1,
     maxWidth: '100%',
   },
 });

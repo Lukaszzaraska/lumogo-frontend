@@ -2,6 +2,7 @@
   "expo": {
     "name": "LumoGo",
     "slug": "LumoGo",
+    "scheme": "lumogo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.lumogo.app"
+      "bundleIdentifier": "com.lumogo.app",
+      "appleTeamId": "95KKH76824"
     },
     "android": {
       "adaptiveIcon": {
@@ -34,7 +36,14 @@
     },
     "plugins": [
       "expo-font",
+      "./plugins/withXcode27DeploymentTarget",
       "expo-secure-store",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.532612730210-4b8l8r79fsuphdvasvjr81sda4p3o077"
+        }
+      ],
       [
         "expo-location",
         {

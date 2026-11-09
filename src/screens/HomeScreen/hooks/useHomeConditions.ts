@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getTodayConditions } from '../../../api/conditions';
+import { useLocationPermission } from '../../../hooks/useLocationPermission';
 import { getApproxLocation } from '../../../location/approxLocation';
 import { homeConditionsMock } from '../../../mocks/home';
 import type { HomeConditionsData } from '../../../types/home';
@@ -19,6 +20,7 @@ export function useHomeConditions(): UseHomeConditionsResult {
   const [data, setData] = useState<HomeConditionsData>(homeConditionsMock);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { status: locationStatus } = useLocationPermission();
 
   useEffect(() => {
     let active = true;
@@ -38,7 +40,7 @@ export function useHomeConditions(): UseHomeConditionsResult {
     return () => {
       active = false;
     };
-  }, []);
+  }, [locationStatus]);
 
   return { data, isLoading, error };
 }
